@@ -3,12 +3,16 @@
 
 {
     "name": "Queue Job Tests",
-    "version": "13.0.1.0.0",
+    "version": "13.0.2.3.0",
     "author": "Camptocamp,Odoo Community Association (OCA)",
     "license": "LGPL-3",
     "category": "Generic Modules",
     "depends": ["queue_job"],
     "website": "https://github.com/OCA/queue",
-    "data": ["security/ir.model.access.csv"],
+    "data": [
+        "data/queue_job_channel_data.xml",
+        "data/queue_job_function_data.xml",
+        "security/ir.model.access.csv",
+    ],
     "installable": True,
 }

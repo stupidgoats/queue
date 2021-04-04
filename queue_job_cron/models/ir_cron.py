@@ -4,8 +4,6 @@ import logging
 
 from odoo import api, fields, models
 
-from odoo.addons.queue_job.job import job
-
 _logger = logging.getLogger(__name__)
 
 
@@ -30,7 +28,6 @@ class IrCron(models.Model):
             else:
                 cron.channel_id = False
 
-    @job(default_channel="root.ir_cron")
     def _run_job_as_queue_job(self, server_action):
         return server_action.run()
 
@@ -39,7 +36,7 @@ class IrCron(models.Model):
             return self.with_delay(
                 priority=self.priority,
                 description=self.name,
-                channel=self.channel_id.name,
+                channel=self.channel_id.complete_name,
             )._run_job_as_queue_job(server_action=self.ir_actions_server_id)
         else:
             return super().method_direct_trigger()
@@ -51,7 +48,7 @@ class IrCron(models.Model):
             return self.with_delay(
                 priority=cron.priority,
                 description=cron.name,
-                channel=cron.channel_id.name,
+                channel=cron.channel_id.complete_name,
             )._run_job_as_queue_job(server_action=server_action)
         else:
             return super()._callback(

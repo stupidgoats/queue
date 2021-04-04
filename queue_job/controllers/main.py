@@ -7,6 +7,7 @@ import traceback
 from io import StringIO
 
 from psycopg2 import OperationalError
+from werkzeug.exceptions import Forbidden
 
 import odoo
 from odoo import _, http, tools
@@ -31,6 +32,7 @@ class RunJobController(http.Controller):
         job.perform()
         job.set_done()
         job.store()
+        env["base"].flush()
         env.cr.commit()
         _logger.debug("%s done", job)
 
@@ -75,10 +77,10 @@ class RunJobController(http.Controller):
                 if err.pgcode not in PG_CONCURRENCY_ERRORS_TO_RETRY:
                     raise
 
-                retry_postpone(
-                    job, tools.ustr(err.pgerror, errors="replace"), seconds=PG_RETRY
-                )
                 _logger.debug("%s OperationalError, postponed", job)
+                raise RetryableJobError(
+                    tools.ustr(err.pgerror, errors="replace"), seconds=PG_RETRY
+                )
 
         except NothingToDoJob as err:
             if str(err):
@@ -93,6 +95,10 @@ class RunJobController(http.Controller):
             # delay the job later, requeue
             retry_postpone(job, str(err), seconds=err.seconds)
             _logger.debug("%s postponed", job)
+            # Do not trigger the error up because we don't want an exception
+            # traceback in the logs we should have the traceback when all
+            # retries are exhausted
+            env.cr.rollback()
 
         except (FailedJobError, Exception):
             buff = StringIO()
@@ -108,3 +114,35 @@ class RunJobController(http.Controller):
             raise
 
         return ""
+
+    @http.route("/queue_job/create_test_job", type="http", auth="user")
+    def create_test_job(
+        self, priority=None, max_retries=None, channel=None, description="Test job"
+    ):
+        if not http.request.env.user.has_group("base.group_erp_manager"):
+            raise Forbidden(_("Access Denied"))
+
+        if priority is not None:
+            try:
+                priority = int(priority)
+            except ValueError:
+                priority = None
+
+        if max_retries is not None:
+            try:
+                max_retries = int(max_retries)
+            except ValueError:
+                max_retries = None
+
+        delayed = (
+            http.request.env["queue.job"]
+            .with_delay(
+                priority=priority,
+                max_retries=max_retries,
+                channel=channel,
+                description=description,
+            )
+            ._test_job()
+        )
+
+        return delayed.db_record().uuid
